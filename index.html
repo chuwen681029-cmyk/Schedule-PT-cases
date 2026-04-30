@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>物理治療排個案系統</title>
+
+<!-- SheetJS for Excel import/export -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;background:#f1f5f9;color:#1e293b;min-height:100vh}
+.container{max-width:960px;margin:0 auto;padding:0 16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:660px){.grid2{grid-template-columns:1fr}}
+.header{background:#1d4ed8;color:#fff;padding:18px 0;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.h1{font-size:19px;font-weight:700}
+.tab-bar{display:flex;gap:6px;background:#fff;padding:8px;border-radius:14px;border:1px solid #e2e8f0;margin-bottom:16px;overflow-x:auto}
+.tab-btn{flex-shrink:0;padding:8px 14px;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;background:transparent;color:#64748b;transition:.15s}
+.tab-btn.active{background:#dbeafe;color:#1d4ed8}
+.tab-btn:hover:not(.active){background:#f8fafc}
+.card{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:20px}
+.card-title{font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px}
+.card-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.mb4{margin-bottom:14px}
+.field-group{margin-bottom:14px}
+.field-label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:6px}
+.tog-group{display:flex;background:#e2e8f0;border-radius:10px;padding:3px;gap:3px}
+.tog{flex:1;padding:7px 10px;border:none;border-radius:8px;font-size:13px;cursor:pointer;background:transparent;color:#64748b;transition:.15s;font-family:inherit}
+.tog.active{background:#fff;color:#1d4ed8;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.select-wrap{position:relative}
+.select-wrap select{width:100%;padding:10px 36px 10px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;font-size:13px;appearance:none;outline:none;color:#1e293b;font-family:inherit}
+.select-wrap::after{content:"▾";position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:#64748b}
+.date-input{padding:7px 10px;border:1px solid #93c5fd;border-radius:8px;font-size:13px;font-weight:600;color:#1d4ed8;background:#eff6ff;outline:none;font-family:inherit}
+.btn-primary{width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s;font-family:inherit}
+.btn-primary:hover:not([disabled]){background:#1e40af}
+.btn-primary[disabled]{opacity:.45;cursor:not-allowed}
+.btn-sm-bar{display:flex;gap:6px}
+.btn-exp{padding:7px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#475569;transition:.15s;font-family:inherit}
+.btn-exp:hover{background:#f1f5f9}
+.btn-exp.green{background:#16a34a;color:#fff;border-color:#16a34a}
+.btn-exp.green:hover{background:#15803d}
+.btn-outline{padding:8px 14px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;font-size:13px;font-weight:600;cursor:pointer;color:#475569;transition:.15s;font-family:inherit}
+.btn-outline:hover{background:#e2e8f0}
+.btn-confirm{padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-cancel{padding:6px 10px;background:#fff;color:#64748b;border:1px solid #cbd5e1;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit}
+.notice{border-radius:8px;padding:8px 12px;font-size:12px;border:1px solid;margin-bottom:10px}
+.n-green{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}
+.n-amber{background:#fffbeb;border-color:#fde68a;color:#92400e}
+.n-blue{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+.n-red{background:#fef2f2;border-color:#fecaca;color:#dc2626}
+.list-item{display:flex;align-items:center;justify-content:space-between;padding:11px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:8px;background:#f8fafc}
+.list-left{display:flex;align-items:center;gap:10px}
+.num-badge{width:28px;height:28px;border-radius:50%;background:#dbeafe;color:#1d4ed8;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.list-name{font-weight:700;font-size:13px}
+.list-tags{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;border:1px solid #e2e8f0;color:#64748b;background:#fff}
+.pill{font-size:11px;background:#e2e8f0;color:#475569;padding:1px 7px;border-radius:10px;margin-left:4px}
+.del-btn{border:none;background:transparent;cursor:pointer;font-size:16px;padding:4px 8px;border-radius:6px;transition:.15s}
+.del-btn:hover{background:#fee2e2}
+.empty-state{text-align:center;padding:40px 0;color:#94a3b8}
+.table-wrap{overflow-x:auto;border-radius:10px;border:1px solid #e2e8f0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f1f5f9;padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:#64748b;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f8fafc}
+.sticky-head{position:sticky;top:0;z-index:1}
+.empty-td{text-align:center;padding:32px;color:#94a3b8}
+.c-blue{color:#1d4ed8;font-weight:600}
+.c-teal{color:#0d9488;font-weight:600}
+.c-red{color:#dc2626;font-weight:700}
+.c-muted{color:#94a3b8;font-size:12px}
+.badge-blue{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#dbeafe;color:#1d4ed8}
+.badge-teal{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#ccfbf1;color:#0f766e}
+.howto{background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:1.9}
+.howto ol{margin-left:18px}
+.howto code{background:#e2e8f0;padding:1px 5px;border-radius:4px;font-size:12px}
+.slot-input{width:72px;padding:6px 8px;text-align:center;border:1px solid #93c5fd;border-radius:8px;background:#eff6ff;color:#1d4ed8;font-size:13px;font-weight:700;outline:none;font-family:inherit}
+.import-preview{border:1px solid #bfdbfe;border-radius:10px;overflow:hidden;margin-top:10px}
+.preview-hdr{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#eff6ff;font-size:13px;font-weight:600;color:#1d4ed8;gap:8px;flex-wrap:wrap}
+.save-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+.save-ok{color:#16a34a;font-weight:600;font-size:13px}
+#loading{display:flex;align-items:center;justify-content:center;height:100vh;color:#64748b;font-size:15px;gap:8px}
+#app{display:none}
+.vgap{display:flex;flex-direction:column;gap:14px}
+.row-gap{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div id="loading">⏳ 連線至 Firebase 中...</div>
+<div id="app"></div>
+
+<script type="module">
+import { initializeApp }        from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, signInAnonymously, onAuthStateChanged }
+                                from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, collection, onSnapshot, addDoc, deleteDoc,
+         doc, serverTimestamp, query, orderBy, setDoc }
+                                from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  🔧 請將您的 Firebase 設定貼在此處                               ║
+// ║  Firebase Console → 專案設定 → 您的應用程式 → firebaseConfig     ║
+// ╚══════════════════════════════════════════════════════════════════╝
+const firebaseConfig = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+const APP_ID = 'pt-system-11504';   // 可自訂，Firestore 路徑前綴
+
+// ── 治療師基本資料 ──────────────────────────────────────────────────
+const TB = [
+  { id:'PD', name:'PD吳淑妮', amDept:'骨科', pmDept:'骨科' },
+  { id:'PF', name:'PF葉秀逸', amDept:'骨科', pmDept:'骨科' },
+  { id:'PG', name:'PG李敬恩', amDept:'神經', pmDept:'行政' },
+  { id:'PH', name:'PH李佳紋', amDept:'床邊', pmDept:'神經' },
+  { id:'PI', name:'PI徐瑄徽', amDept:'神經', pmDept:'骨科' },
+  { id:'PJ', name:'PJ黃秋雯', amDept:'骨科', pmDept:'神經' },
+  { id:'PP', name:'PP李政徹', amDept:'神經', pmDept:'床邊' },
+  { id:'PU', name:'PU鄭堯仁', amDept:'神經', pmDept:'床邊' },
+  { id:'PV', name:'PV劉明杰', amDept:'骨科', pmDept:'神經' },
+  { id:'PA', name:'PA林佳億', amDept:'床邊', pmDept:'骨科' },
+  { id:'P3', name:'P3吳泓儒', amDept:'骨科', pmDept:'神經' },
+];
+const DEF = {
+  PD:{am:27,pm:27},PF:{am:25,pm:25},PG:{am:20,pm:0},
+  PH:{am:0,pm:31}, PI:{am:28,pm:28},PJ:{am:27,pm:27},
+  PP:{am:27,pm:0}, PU:{am:29,pm:0}, PV:{am:29,pm:29},
+  PA:{am:0,pm:32}, P3:{am:32,pm:32}
+};
+const NC = d => ['床邊','行政'].includes(d);
+const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+const mk    = dt => dt.substring(0,7);
+
+// ── 全域狀態 ─────────────────────────────────────────────────────────
+const S = {
+  tab:'new', date:today(),
+  src:'門診', dept:'骨科', time:'上午', cpx:1, tid:'',
+  assignments:[], slots:{}, editSlots:{},
+  preview:null, importErr:'', importOk:'',
+  saveOk:false, saving:false, submitting:false,
+};
+
+// ── 衍生計算 ─────────────────────────────────────────────────────────
+const therapists = () => TB.map(t => {
+  const s = S.slots[mk(S.date)]?.[t.id] || DEF[t.id] || {am:0,pm:0};
+  return { ...t, baseAm: s.am??0, basePm: s.pm??0 };
+});
+
+const stats = () => {
+  const st = {};
+  therapists().forEach(t => {
+    st[t.id] = { ...t, amR:t.baseAm, pmR:t.basePm, today:0, out:0, inp:0, tot:0 };
+  });
+  S.assignments.forEach(a => {
+    const t=st[a.therapistId]; if(!t) return;
+    if(a.consumedTime==='上午') t.amR -= a.complexity;
+    if(a.consumedTime==='下午') t.pmR -= a.complexity;
+    if(a.dateStr===S.date) t.today++;
+    if(a.source==='門診') t.out++;
+    if(a.source==='住院') t.inp++;
+    t.tot++;
+  });
+  return st;
+};
+
+const validList = () => {
+  const st = stats();
+  return therapists().flatMap(t => {
+    const ts=st[t.id]; let match=false, rem=0, ct='';
+    if(S.src==='住院'){
+      const mA=t.amDept===S.dept, mP=t.pmDept===S.dept;
+      if(mA&&mP){ match=true; if(ts.amR>=ts.pmR){rem=ts.amR;ct='上午';}else{rem=ts.pmR;ct='下午';} }
+      else if(mA){ match=true; rem=ts.amR; ct='上午'; }
+      else if(mP){ match=true; rem=ts.pmR; ct='下午'; }
+    } else {
+      if(S.time==='上午'&&t.amDept===S.dept){ match=true; rem=ts.amR; ct='上午'; }
+      else if(S.time==='下午'&&t.pmDept===S.dept){ match=true; rem=ts.pmR; ct='下午'; }
+    }
+    return match ? [{ ...t, rem, ct, disabled: ts.today>=3 }] : [];
+  }).sort((a,b)=>b.rem-a.rem);
+};
+
+// ── Firebase ──────────────────────────────────────────────────────────
+const fbApp  = initializeApp(firebaseConfig);
+const auth   = getAuth(fbApp);
+const db     = getFirestore(fbApp);
+const aCol   = () => collection(db,'artifacts',APP_ID,'public','data','assignments');
+const sCol   = () => collection(db,'artifacts',APP_ID,'public','data','monthlySlots');
+
+signInAnonymously(auth).catch(console.error);
+onAuthStateChanged(auth, user => {
+  if (!user) return;
+  onSnapshot(query(aCol(), orderBy('createdAt','desc')), snap => {
+    S.assignments = snap.docs.map(d=>({id:d.id,...d.data()}));
+    render();
+  });
+  onSnapshot(sCol(), snap => {
+    S.slots = {};
+    snap.docs.forEach(d => S.slots[d.id] = d.data());
+    render();
+  });
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='block';
+});
+
+// ── Actions ───────────────────────────────────────────────────────────
+async function submit() {
+  if (!S.tid||S.submitting) return;
+  const vl = validList();
+  const sel = vl.find(t=>t.id===S.tid); if(!sel) return;
+  S.submitting=true; render();
+  try {
+    await addDoc(aCol(), {
+      dateStr:S.date, source:S.src, department:S.dept,
+      time: S.src==='住院'?'不限':S.time,
+      consumedTime:sel.ct, complexity:S.cpx,
+      therapistId:S.tid, therapistName:sel.name,
+      createdAt:serverTimestamp()
+    });
+    S.cpx=1;
+  } catch(e){console.error(e);}
+  S.submitting=false; render();
+}
+
+async function del(id) {
+  try { await deleteDoc(doc(db,'artifacts',APP_ID,'public','data','assignments',id)); }
+  catch(e){console.error(e);}
+}
+
+async function saveSlots() {
+  if(S.saving) return;
+  S.saving=true; render();
+  const data={};
+  TB.forEach(t=>{ data[t.id]={ am:S.editSlots[t.id]?.am??0, pm:S.editSlots[t.id]?.pm??0 }; });
+  try {
+    await setDoc(doc(db,'artifacts',APP_ID,'public','data','monthlySlots',mk(S.date)), data);
+    S.saveOk=true; setTimeout(()=>{S.saveOk=false;render();},2500);
+  } catch(e){console.error(e);}
+  S.saving=false; render();
+}
+
+function initEdit() {
+  const cur = S.slots[mk(S.date)]||{};
+  S.editSlots={};
+  TB.forEach(t => {
+    const s=cur[t.id];
+    S.editSlots[t.id]={ am:s?(s.am??0):(DEF[t.id]?.am??0), pm:s?(s.pm??0):(DEF[t.id]?.pm??0) };
+  });
+}
+
+// ── File Import ───────────────────────────────────────────────────────
+function handleFile(e) {
+  const file=e.target.files[0]; if(!file) return;
+  S.importErr=''; S.importOk=''; S.preview=null;
+  const ext=file.name.split('.').pop().toLowerCase();
+  const reader=new FileReader();
+  reader.onload=evt=>{
+    let rows=[];
+    try {
+      if(ext==='csv'){
+        let txt=evt.target.result;
+        if(txt.charCodeAt(0)===0xFEFF) txt=txt.slice(1);
+        const lines=txt.split(/\r?\n/).filter(l=>l.trim());
+        const hdrs=lines[0].split(',').map(h=>h.replace(/^"|"$/g,'').trim());
+        for(let i=1;i<lines.length;i++){
+          const vals=lines[i].split(',').map(v=>v.replace(/^"|"$/g,'').trim());
+          const row={}; hdrs.forEach((h,j)=>row[h]=vals[j]??''); rows.push(row);
+        }
+      } else {
+        const wb=XLSX.read(new Uint8Array(evt.target.result),{type:'array'});
+        rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      }
+    } catch(err){ S.importErr='無法解析檔案：'+err.message; render(); return; }
+
+    if(!rows.length){ S.importErr='檔案內無資料。'; render(); return; }
+    const hdrs=Object.keys(rows[0]);
+    const fk=(ks)=>hdrs.find(h=>ks.map(k=>k.toLowerCase()).includes(h.toLowerCase().trim()));
+    const cId=fk(['治療師id','治療師ID','id','ID','代碼','代號']);
+    const cAm=fk(['上午格數','上午','am','baseam','AM格數','上午格']);
+    const cPm=fk(['下午格數','下午','pm','basepm','PM格數','下午格']);
+    if(!cId||!cAm||!cPm){
+      S.importErr=`找不到必要欄位，需有：治療師ID、上午格數、下午格數\n現有欄位：${hdrs.join('、')}`;
+      render(); return;
+    }
+    const vIds=new Set(TB.map(t=>t.id));
+    const preview=[], errs=[];
+    rows.forEach((row,i)=>{
+      const tid=String(row[cId]||'').trim(); if(!tid) return;
+      const am=parseInt(row[cAm]), pm=parseInt(row[cPm]);
+      if(!vIds.has(tid)){ errs.push(`第${i+2}行：找不到治療師「${tid}」`); return; }
+      if(isNaN(am)||isNaN(pm)){ errs.push(`第${i+2}行(${tid})：格數格式錯誤`); return; }
+      preview.push({id:tid, name:TB.find(t=>t.id===tid)?.name||tid, am, pm});
+    });
+    if(errs.length){ S.importErr=errs.join('\n'); render(); return; }
+    if(!preview.length){ S.importErr='沒有匹配的治療師資料。'; render(); return; }
+    S.preview=preview; render();
+  };
+  if(ext==='csv') reader.readAsText(file,'UTF-8'); else reader.readAsArrayBuffer(file);
+  e.target.value='';
+}
+
+function confirmImport(){
+  if(!S.preview) return;
+  S.preview.forEach(r=>{
+    S.editSlots[r.id]={am:r.am, pm:r.pm};
+  });
+  S.importOk=`成功匯入 ${S.preview.length} 筆，請按「儲存至 Firebase」確認生效。`;
+  S.preview=null; render();
+}
+
+// ── Export ────────────────────────────────────────────────────────────
+function dlCSV(name,rows){
+  if(!rows.length) return;
+  let csv='\uFEFF'+Object.keys(rows[0]).join(',')+'\n';
+  rows.forEach(r=>{ csv+=Object.values(r).map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')+'\n'; });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=name+'_'+S.date+'.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function dlXLSX(name,rows){
+  if(!rows.length) return;
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
+  XLSX.writeFile(wb, name+'_'+S.date+'.xlsx');
+}
+function summaryRows(){
+  const th=therapists(), st=stats();
+  return th.map(t=>{const s=st[t.id];return{治療師:t.name,上午科別:t.amDept,下午科別:t.pmDept,
+    上午剩餘:NC(t.amDept)?'N/A':s.amR,上午總格:NC(t.amDept)?'N/A':t.baseAm,
+    下午剩餘:NC(t.pmDept)?'N/A':s.pmR,下午總格:NC(t.pmDept)?'N/A':t.basePm,
+    門診:s.out,住院:s.inp,合計:s.tot};});
+}
+function detailRows(){
+  return S.assignments.map(a=>({日期:a.dateStr,來源:a.source,科別:a.department,
+    時段:a.time==='不限'?`不限(扣${a.consumedTime})`:a.time,治療師:a.therapistName,格數:a.complexity}));
+}
+function dlTemplate(){
+  const cur=S.slots[mk(S.date)]||{};
+  const rows=TB.map(t=>{const s=cur[t.id];return{
+    '治療師ID':t.id,'姓名':t.name,
+    '上午格數':s?(s.am??DEF[t.id]?.am??0):(DEF[t.id]?.am??0),
+    '下午格數':s?(s.pm??DEF[t.id]?.pm??0):(DEF[t.id]?.pm??0),
+  };});
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'格數設定');
+  XLSX.writeFile(wb,`格數設定模板_${mk(S.date)}.xlsx`);
+}
+
+// ── Event delegation ─────────────────────────────────────────────────
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-a]'); if(!el) return;
+  const a=el.dataset.a, v=el.dataset.v;
+  if(a==='tab'){ S.tab=v; if(v==='settings') initEdit(); render(); }
+  if(a==='src'){ S.src=v; render(); }
+  if(a==='dept'){ S.dept=v; render(); }
+  if(a==='time'){ S.time=v; render(); }
+  if(a==='cpx'){ S.cpx=parseInt(v); render(); }
+  if(a==='submit') submit();
+  if(a==='del') del(v);
+  if(a==='save') saveSlots();
+  if(a==='confirm') confirmImport();
+  if(a==='cancel'){ S.preview=null; S.importErr=''; render(); }
+  if(a==='dl-tpl') dlTemplate();
+  if(a==='upload') document.getElementById('fi').click();
+  if(a==='exp-sum-csv')  dlCSV('格數統計總表', summaryRows());
+  if(a==='exp-sum-xlsx') dlXLSX('格數統計總表', summaryRows());
+  if(a==='exp-det-csv')  dlCSV('全部派案明細', detailRows());
+  if(a==='exp-det-xlsx') dlXLSX('全部派案明細', detailRows());
+});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.id==='dp'){ S.date=el.value; render(); }
+  if(el.id==='ts'){ S.tid=el.value; render(); }
+  if(el.id==='mp'){ S.date=el.value+'-01'; initEdit(); render(); }
+  if(el.id==='fi') handleFile(e);
+  if(el.dataset.am){ if(!S.editSlots[el.dataset.am]) S.editSlots[el.dataset.am]={am:0,pm:0}; S.editSlots[el.dataset.am].am=parseInt(el.value)||0; }
+  if(el.dataset.pm){ if(!S.editSlots[el.dataset.pm]) S.editSlots[el.dataset.pm]={am:0,pm:0}; S.editSlots[el.dataset.pm].pm=parseInt(el.value)||0; }
+});
+
+// ── Render helpers ────────────────────────────────────────────────────
+const T=(field,val,label,cur)=>`<button class="tog${cur===val?' active':''}" data-a="${field}" data-v="${val}">${label}</button>`;
+
+function renderNew(){
+  const vl=validList();
+  if(!vl.find(t=>t.id===S.tid&&!t.disabled)){ const f=vl.find(t=>!t.disabled); S.tid=f?f.id:''; }
+  const sel=vl.find(t=>t.id===S.tid);
+  const opts=vl.length===0?'<option value="">── 無符合條件的治療師 ──</option>'
+    :vl.map(t=>`<option value="${t.id}"${t.id===S.tid?' selected':''}${t.disabled?' disabled':''}>${t.name}（剩餘 ${t.rem} 格）${t.disabled?' ── 今日已達3人上限':''}</option>`).join('');
+  const hasCustom=!!S.slots[mk(S.date)];
+  const todayList=S.assignments.filter(a=>a.dateStr===S.date);
+  const listHtml=todayList.length===0
+    ?'<div class="empty-state"><p style="font-size:32px;margin-bottom:8px">📋</p><p>該日尚未有派案紀錄</p></div>'
+    :todayList.map((a,i)=>`<div class="list-item">
+        <div class="list-left">
+          <div class="num-badge">${i+1}</div>
+          <div>
+            <div class="list-name">${a.therapistName}<span class="pill">${a.complexity}格</span></div>
+            <div class="list-tags"><span class="tag">${a.source}</span><span class="tag">${a.department}</span><span class="tag">${a.time}${a.source==='住院'?` (扣${a.consumedTime})`:''}</span></div>
+          </div>
+        </div>
+        <button class="del-btn" data-a="del" data-v="${a.id}" title="刪除">🗑</button>
+      </div>`).join('');
+  return `<div class="grid2">
+    <div class="card">
+      <div class="row-gap mb4">
+        <label class="field-label" style="margin:0;white-space:nowrap" for="dp">📅 派案日期</label>
+        <input id="dp" type="date" value="${S.date}" class="date-input">
+      </div>
+      <div class="notice ${hasCustom?'n-green':'n-amber'}">${hasCustom?'✅ 已套用 '+mk(S.date)+' 自訂格數':'⚠️ '+mk(S.date)+' 使用預設格數（可至「月份格數設定」匯入更新）'}</div>
+      <div class="field-group"><label class="field-label">個案來源</label><div class="tog-group">${T('src','門診','門診',S.src)}${T('src','住院','住院',S.src)}</div></div>
+      <div class="field-group"><label class="field-label">科別</label><div class="tog-group">${T('dept','骨科','骨科',S.dept)}${T('dept','神經','神經',S.dept)}</div></div>
+      ${S.src!=='住院'?`<div class="field-group"><label class="field-label">時段</label><div class="tog-group">${T('time','上午','上午',S.time)}${T('time','下午','下午',S.time)}</div></div>`:''}
+      <div class="field-group"><label class="field-label">複雜度</label><div class="tog-group">${T('cpx','2','2格（複雜/中複）',S.cpx)}${T('cpx','1','1格（中中/簡中）',S.cpx)}</div></div>
+      <div class="field-group">
+        <label class="field-label" for="ts">優先派案人選</label>
+        <div class="select-wrap"><select id="ts">${opts}</select></div>
+        ${S.src==='住院'&&sel?`<div class="notice n-blue" style="margin-top:8px">將扣除 <strong>${sel.ct}</strong> 格數</div>`:''}
+      </div>
+      <button class="btn-primary" data-a="submit" ${S.submitting||!S.tid?'disabled':''}>${S.submitting?'⏳ 送出中...':'✅ 確認派案'}</button>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;height:560px">
+      <div class="card-title">🕐 當日派案清單（${S.date}）</div>
+      <div style="flex:1;overflow-y:auto;margin-top:10px">${listHtml}</div>
+    </div>
+  </div>`;
+}
+
+function renderSummary(){
+  const th=therapists(), st=stats();
+  const rows=th.map(t=>{const s=st[t.id];const aN=NC(t.amDept),pN=NC(t.pmDept);return`<tr>
+    <td><strong>${t.name}</strong> <span class="c-muted">(${t.amDept}/${t.pmDept})</span></td>
+    <td>${aN?'<span class="c-muted">─</span>':`<span class="${s.amR<0?'c-red':'c-blue'}">${s.amR}</span> <span class="c-muted">/ ${t.baseAm}</span>`}</td>
+    <td>${pN?'<span class="c-muted">─</span>':`<span class="${s.pmR<0?'c-red':'c-blue'}">${s.pmR}</span> <span class="c-muted">/ ${t.basePm}</span>`}</td>
+    <td><span class="c-blue">${s.out}</span> / <span class="c-teal">${s.inp}</span> / <strong>${s.tot}</strong></td>
+  </tr>`;}).join('');
+  return `<div class="card">
+    <div class="card-header">
+      <div class="card-title">👥 格數統計總表</div>
+      <div class="btn-sm-bar">
+        <button class="btn-exp" data-a="exp-sum-csv">📄 CSV</button>
+        <button class="btn-exp green" data-a="exp-sum-xlsx">📊 Excel</button>
+      </div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>治療師（上午/下午）</th><th>上午 剩餘/總格</th><th>下午 剩餘/總格</th><th>門診/住院/合計</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function renderDetails(){
+  const rows=S.assignments.map(a=>`<tr>
+    <td>${a.dateStr}</td>
+    <td><span class="${a.source==='門診'?'badge-blue':'badge-teal'}">${a.source}</span></td>
+    <td>${a.department}</td>
+    <td>${a.time}${a.source==='住院'?` <span class="c-muted">(扣${a.consumedTime})</span>`:''}</td>
+    <td><strong>${a.therapistName}</strong></td>
+    <td><strong>${a.complexity}</strong></td>
+  </tr>`).join('');
+  return `<div class="card">
+    <div class="card-header">
+      <div class="card-title">📋 全部派案明細</div>
+      <div class="btn-sm-bar">
+        <button class="btn-exp" data-a="exp-det-csv">📄 CSV</button>
+        <button class="btn-exp green" data-a="exp-det-xlsx">📊 Excel</button>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:560px;overflow-y:auto"><table>
+      <thead class="sticky-head"><tr><th>日期</th><th>來源</th><th>科別</th><th>時段</th><th>治療師</th><th>格數</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="6" class="empty-td">尚無派案紀錄</td></tr>'}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function renderSettings(){
+  const m=mk(S.date), hasData=!!S.slots[m];
+  const tRows=TB.map(t=>{
+    const aN=NC(t.amDept),pN=NC(t.pmDept);
+    const av=S.editSlots[t.id]?.am??0, pv=S.editSlots[t.id]?.pm??0;
+    return`<tr>
+      <td><strong>${t.name}</strong></td>
+      <td class="c-muted">${t.amDept}</td><td class="c-muted">${t.pmDept}</td>
+      <td>${aN?'<span class="c-muted">─</span>':`<input type="number" min="0" value="${av}" data-am="${t.id}" class="slot-input">`}</td>
+      <td>${pN?'<span class="c-muted">─</span>':`<input type="number" min="0" value="${pv}" data-pm="${t.id}" class="slot-input">`}</td>
+    </tr>`;
+  }).join('');
+  const pvHtml=S.preview?`<div class="import-preview">
+    <div class="preview-hdr"><span>📋 匯入預覽（${S.preview.length} 筆）</span>
+      <div style="display:flex;gap:6px"><button class="btn-cancel" data-a="cancel">取消</button><button class="btn-confirm" data-a="confirm">確認套用</button></div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>治療師</th><th>上午格數</th><th>下午格數</th></tr></thead>
+      <tbody>${S.preview.map(r=>`<tr><td>${r.name}</td><td class="c-blue">${r.am}</td><td class="c-blue">${r.pm}</td></tr>`).join('')}</tbody>
+    </table></div>
+  </div>`:'';
+  return `<div class="vgap">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">⚙️ 月份格數設定</div>
+        <div class="row-gap"><span class="field-label" style="margin:0">設定月份：</span>
+          <input id="mp" type="month" value="${m}" class="date-input"></div>
+      </div>
+      <div class="notice ${hasData?'n-green':'n-amber'}">${hasData?'✅ '+m+' 已有自訂格數設定':'⚠️ '+m+' 目前使用預設格數'}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">📤 整批匯入格數（Excel / CSV）</div>
+      <div class="howto"><strong>使用方式：</strong><ol>
+        <li>下載模板 → 填入各治療師上午/下午格數</li>
+        <li>上傳檔案 → 確認預覽 → 按「確認套用」</li>
+        <li>按「儲存至 Firebase」同步所有裝置</li>
+      </ol><p>支援欄位名稱：<code>治療師ID</code>、<code>上午格數</code>、<code>下午格數</code></p></div>
+      <div class="row-gap" style="margin-bottom:10px">
+        <button class="btn-outline" data-a="dl-tpl">📥 下載 Excel 模板</button>
+        <button class="btn-primary" style="width:auto;padding:8px 16px" data-a="upload">📂 上傳 Excel / CSV</button>
+        <input id="fi" type="file" accept=".xlsx,.xls,.csv" style="display:none">
+      </div>
+      ${S.importErr?`<div class="notice n-red" style="white-space:pre-line">❌ ${S.importErr}</div>`:''}
+      ${S.importOk?`<div class="notice n-green">✅ ${S.importOk}</div>`:''}
+      ${pvHtml}
+    </div>
+    <div class="card">
+      <div class="card-title">✏️ 手動調整格數</div>
+      <div class="table-wrap" style="margin-top:10px"><table>
+        <thead><tr><th>治療師</th><th>上午科別</th><th>下午科別</th><th>上午格數</th><th>下午格數</th></tr></thead>
+        <tbody>${tRows}</tbody>
+      </table></div>
+      <div class="save-row">
+        <button class="btn-primary" style="width:auto;padding:10px 24px" data-a="save" ${S.saving?'disabled':''}>
+          ${S.saving?'⏳ 儲存中...':'💾 儲存 '+m+' 至 Firebase'}
+        </button>
+        ${S.saveOk?'<span class="save-ok">✅ 儲存成功！已同步所有裝置</span>':''}
+        <span class="c-muted">儲存後所有裝置立即生效</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Main render ───────────────────────────────────────────────────────
+function render(){
+  const tabs=[
+    {id:'new',    label:'➕ 新增派案'},
+    {id:'summary',label:'👥 總表'},
+    {id:'details',label:'📋 全部明細'},
+    {id:'settings',label:'⚙️ 月份格數設定'},
+  ];
+  let content='';
+  if(S.tab==='new')      content=renderNew();
+  if(S.tab==='summary')  content=renderSummary();
+  if(S.tab==='details')  content=renderDetails();
+  if(S.tab==='settings') content=renderSettings();
+
+  document.getElementById('app').innerHTML=`
+    <header class="header"><div class="container"><h1 class="h1">⚡ 物理治療排個案系統</h1></div></header>
+    <div class="container" style="padding-top:20px;padding-bottom:40px">
+      <div class="tab-bar">${tabs.map(t=>`<button class="tab-btn${S.tab===t.id?' active':''}" data-a="tab" data-v="${t.id}">${t.label}</button>`).join('')}</div>
+      ${content}
+    </div>`;
+}
+</script>
+</body>
+</html>
