@@ -4,10 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>物理治療排個案系統</title>
-
-<!-- SheetJS for Excel import/export -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;background:#f1f5f9;color:#1e293b;min-height:100vh}
@@ -36,7 +33,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .btn-primary{width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s;font-family:inherit}
 .btn-primary:hover:not([disabled]){background:#1e40af}
 .btn-primary[disabled]{opacity:.45;cursor:not-allowed}
-.btn-sm-bar{display:flex;gap:6px}
+.btn-sm-bar{display:flex;gap:6px;flex-wrap:wrap}
 .btn-exp{padding:7px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#475569;transition:.15s;font-family:inherit}
 .btn-exp:hover{background:#f1f5f9}
 .btn-exp.green{background:#16a34a;color:#fff;border-color:#16a34a}
@@ -50,6 +47,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .n-amber{background:#fffbeb;border-color:#fde68a;color:#92400e}
 .n-blue{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
 .n-red{background:#fef2f2;border-color:#fecaca;color:#dc2626}
+.n-slate{background:#f8fafc;border-color:#e2e8f0;color:#475569}
 .list-item{display:flex;align-items:center;justify-content:space-between;padding:11px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:8px;background:#f8fafc}
 .list-left{display:flex;align-items:center;gap:10px}
 .num-badge{width:28px;height:28px;border-radius:50%;background:#dbeafe;color:#1d4ed8;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
@@ -86,6 +84,10 @@ tr:hover td{background:#f8fafc}
 #app{display:none}
 .vgap{display:flex;flex-direction:column;gap:14px}
 .row-gap{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.period-select{padding:7px 32px 7px 10px;border:1px solid #93c5fd;border-radius:8px;font-size:13px;font-weight:600;color:#1d4ed8;background:#eff6ff;outline:none;font-family:inherit;appearance:none;cursor:pointer}
+.period-wrap{position:relative;display:inline-block}
+.period-wrap::after{content:"▾";position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:#1d4ed8;font-size:11px}
+.period-badge{display:inline-block;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe}
 </style>
 </head>
 <body>
@@ -100,10 +102,6 @@ import { getFirestore, collection, onSnapshot, addDoc, deleteDoc,
          doc, serverTimestamp, query, orderBy, setDoc }
                                 from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
-// ╔══════════════════════════════════════════════════════════════════╗
-// ║  🔧 請將您的 Firebase 設定貼在此處                               ║
-// ║  Firebase Console → 專案設定 → 您的應用程式 → firebaseConfig     ║
-// ╚══════════════════════════════════════════════════════════════════╝
 const firebaseConfig = {
   apiKey:            "YOUR_API_KEY",
   authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
@@ -112,9 +110,8 @@ const firebaseConfig = {
   messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
   appId:             "YOUR_APP_ID"
 };
-const APP_ID = 'pt-system-11504';   // 可自訂，Firestore 路徑前綴
+const APP_ID = 'pt-system-11504';
 
-// ── 治療師基本資料 ──────────────────────────────────────────────────
 const TB = [
   { id:'PD', name:'PD吳淑妮', amDept:'骨科', pmDept:'骨科' },
   { id:'PF', name:'PF葉秀逸', amDept:'骨科', pmDept:'骨科' },
@@ -134,46 +131,118 @@ const DEF = {
   PP:{am:27,pm:0}, PU:{am:29,pm:0}, PV:{am:29,pm:29},
   PA:{am:0,pm:32}, P3:{am:32,pm:32}
 };
-const NC = d => ['床邊','行政'].includes(d);
+const NC    = d => ['床邊','行政'].includes(d);
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const mk    = dt => dt.substring(0,7);
 
-// ── 全域狀態 ─────────────────────────────────────────────────────────
 const S = {
   tab:'new', date:today(),
   src:'門診', dept:'骨科', time:'上午', cpx:1, tid:'',
-  assignments:[], slots:{}, editSlots:{},
-  preview:null, importErr:'', importOk:'',
+  assignments:[], slots:{},
+  slotsHistory:[], // [{id, monthKey, savedDate, data}]
+  editSlots:{}, preview:null, importErr:'', importOk:'',
   saveOk:false, saving:false, submitting:false,
+  summaryPeriod:'current',
+  detailPeriod:'current',
 };
 
-// ── 衍生計算 ─────────────────────────────────────────────────────────
-const therapists = () => TB.map(t => {
-  const s = S.slots[mk(S.date)]?.[t.id] || DEF[t.id] || {am:0,pm:0};
-  return { ...t, baseAm: s.am??0, basePm: s.pm??0 };
-});
+// ── 期間計算 ──────────────────────────────────────────────────────────
+function getPeriods() {
+  return [...S.slotsHistory]
+    .sort((a,b)=>a.savedDate.localeCompare(b.savedDate))
+    .map((p,i,arr)=>{
+      const next = arr[i+1];
+      return {
+        monthKey:  p.monthKey,
+        savedDate: p.savedDate,
+        startDate: p.savedDate,
+        endDate:   next ? dateMinus1(next.savedDate) : null,
+        data:      p.data,
+        label:     p.monthKey + '（' + p.savedDate + ' 起）',
+      };
+    });
+}
 
-const stats = () => {
-  const st = {};
-  therapists().forEach(t => {
-    st[t.id] = { ...t, amR:t.baseAm, pmR:t.basePm, today:0, out:0, inp:0, tot:0 };
+function dateMinus1(dateStr) {
+  const d = new Date(dateStr); d.setDate(d.getDate()-1);
+  return d.toISOString().slice(0,10);
+}
+
+function getPeriodForDate(dateStr) {
+  const periods = getPeriods();
+  if (!periods.length) return null;
+  let result = null;
+  for (const p of periods) {
+    if (dateStr >= p.startDate) result = p;
+  }
+  return result;
+}
+
+// ── 治療師與統計（依期間）────────────────────────────────────────────
+function therapistsForPeriod(period) {
+  const d = period?.data || null;
+  return TB.map(t => {
+    const s = d?.[t.id] || DEF[t.id] || {am:0,pm:0};
+    return { ...t, baseAm:s.am??0, basePm:s.pm??0 };
   });
-  S.assignments.forEach(a => {
+}
+
+function assignmentsInPeriod(period) {
+  return S.assignments.filter(a =>
+    a.dateStr >= period.startDate && (!period.endDate || a.dateStr <= period.endDate)
+  );
+}
+
+function statsForPeriod(period) {
+  const th = therapistsForPeriod(period);
+  const st = {};
+  th.forEach(t => { st[t.id]={...t,amR:t.baseAm,pmR:t.basePm,today:0,out:0,inp:0,tot:0}; });
+  const list = period ? assignmentsInPeriod(period) : S.assignments;
+  list.forEach(a => {
     const t=st[a.therapistId]; if(!t) return;
-    if(a.consumedTime==='上午') t.amR -= a.complexity;
-    if(a.consumedTime==='下午') t.pmR -= a.complexity;
+    if(a.consumedTime==='上午') t.amR-=a.complexity;
+    if(a.consumedTime==='下午') t.pmR-=a.complexity;
     if(a.dateStr===S.date) t.today++;
     if(a.source==='門診') t.out++;
     if(a.source==='住院') t.inp++;
     t.tot++;
   });
   return st;
+}
+
+function statsAllTime() {
+  const periods = getPeriods();
+  const latest = periods.length ? periods[periods.length-1] : null;
+  return statsForPeriod(latest ? {...latest, startDate:'0000-00-00', endDate:null} : null);
+}
+
+// 新增派案用：取得目前日期所在的期間
+const therapists = () => therapistsForPeriod(getPeriodForDate(S.date));
+const stats = () => {
+  const p = getPeriodForDate(S.date);
+  if (!p) {
+    // 尚無任何期間，使用預設格數統計全部派案
+    const th = therapistsForPeriod(null);
+    const st = {};
+    th.forEach(t => { st[t.id]={...t,amR:t.baseAm,pmR:t.basePm,today:0,out:0,inp:0,tot:0}; });
+    S.assignments.forEach(a => {
+      const t=st[a.therapistId]; if(!t) return;
+      if(a.consumedTime==='上午') t.amR-=a.complexity;
+      if(a.consumedTime==='下午') t.pmR-=a.complexity;
+      if(a.dateStr===S.date) t.today++;
+      if(a.source==='門診') t.out++;
+      if(a.source==='住院') t.inp++;
+      t.tot++;
+    });
+    return st;
+  }
+  return statsForPeriod(p);
 };
 
 const validList = () => {
   const st = stats();
   return therapists().flatMap(t => {
-    const ts=st[t.id]; let match=false, rem=0, ct='';
+    const ts=st[t.id]; let match=false,rem=0,ct='';
     if(S.src==='住院'){
       const mA=t.amDept===S.dept, mP=t.pmDept===S.dept;
       if(mA&&mP){ match=true; if(ts.amR>=ts.pmR){rem=ts.amR;ct='上午';}else{rem=ts.pmR;ct='下午';} }
@@ -183,16 +252,17 @@ const validList = () => {
       if(S.time==='上午'&&t.amDept===S.dept){ match=true; rem=ts.amR; ct='上午'; }
       else if(S.time==='下午'&&t.pmDept===S.dept){ match=true; rem=ts.pmR; ct='下午'; }
     }
-    return match ? [{ ...t, rem, ct, disabled: ts.today>=3 }] : [];
+    return match ? [{...t,rem,ct,disabled:ts.today>=3}] : [];
   }).sort((a,b)=>b.rem-a.rem);
 };
 
 // ── Firebase ──────────────────────────────────────────────────────────
-const fbApp  = initializeApp(firebaseConfig);
-const auth   = getAuth(fbApp);
-const db     = getFirestore(fbApp);
-const aCol   = () => collection(db,'artifacts',APP_ID,'public','data','assignments');
-const sCol   = () => collection(db,'artifacts',APP_ID,'public','data','monthlySlots');
+const fbApp = initializeApp(firebaseConfig);
+const auth  = getAuth(fbApp);
+const db    = getFirestore(fbApp);
+const aCol  = () => collection(db,'artifacts',APP_ID,'public','data','assignments');
+const sCol  = () => collection(db,'artifacts',APP_ID,'public','data','monthlySlots');
+const hCol  = () => collection(db,'artifacts',APP_ID,'public','data','slotsHistory');
 
 signInAnonymously(auth).catch(console.error);
 onAuthStateChanged(auth, user => {
@@ -203,7 +273,11 @@ onAuthStateChanged(auth, user => {
   });
   onSnapshot(sCol(), snap => {
     S.slots = {};
-    snap.docs.forEach(d => S.slots[d.id] = d.data());
+    snap.docs.forEach(d => S.slots[d.id]=d.data());
+    render();
+  });
+  onSnapshot(query(hCol(), orderBy('savedDate','asc')), snap => {
+    S.slotsHistory = snap.docs.map(d=>({id:d.id,...d.data()}));
     render();
   });
   document.getElementById('loading').style.display='none';
@@ -213,13 +287,12 @@ onAuthStateChanged(auth, user => {
 // ── Actions ───────────────────────────────────────────────────────────
 async function submit() {
   if (!S.tid||S.submitting) return;
-  const vl = validList();
-  const sel = vl.find(t=>t.id===S.tid); if(!sel) return;
+  const vl=validList(); const sel=vl.find(t=>t.id===S.tid); if(!sel) return;
   S.submitting=true; render();
   try {
     await addDoc(aCol(), {
       dateStr:S.date, source:S.src, department:S.dept,
-      time: S.src==='住院'?'不限':S.time,
+      time:S.src==='住院'?'不限':S.time,
       consumedTime:sel.ct, complexity:S.cpx,
       therapistId:S.tid, therapistName:sel.name,
       createdAt:serverTimestamp()
@@ -237,22 +310,24 @@ async function del(id) {
 async function saveSlots() {
   if(S.saving) return;
   S.saving=true; render();
+  const m=mk(S.date), savedDate=today();
   const data={};
-  TB.forEach(t=>{ data[t.id]={ am:S.editSlots[t.id]?.am??0, pm:S.editSlots[t.id]?.pm??0 }; });
+  TB.forEach(t=>{ data[t.id]={am:S.editSlots[t.id]?.am??0,pm:S.editSlots[t.id]?.pm??0}; });
   try {
-    await setDoc(doc(db,'artifacts',APP_ID,'public','data','monthlySlots',mk(S.date)), data);
+    await setDoc(doc(db,'artifacts',APP_ID,'public','data','monthlySlots',m), data);
+    // 同步寫入歷史（同月重複儲存會更新起始日和格數）
+    await setDoc(doc(db,'artifacts',APP_ID,'public','data','slotsHistory',m), {
+      monthKey:m, savedDate, data
+    });
     S.saveOk=true; setTimeout(()=>{S.saveOk=false;render();},2500);
   } catch(e){console.error(e);}
   S.saving=false; render();
 }
 
 function initEdit() {
-  const cur = S.slots[mk(S.date)]||{};
+  const cur=S.slots[mk(S.date)]||{};
   S.editSlots={};
-  TB.forEach(t => {
-    const s=cur[t.id];
-    S.editSlots[t.id]={ am:s?(s.am??0):(DEF[t.id]?.am??0), pm:s?(s.pm??0):(DEF[t.id]?.pm??0) };
-  });
+  TB.forEach(t=>{ const s=cur[t.id]; S.editSlots[t.id]={am:s?(s.am??0):(DEF[t.id]?.am??0),pm:s?(s.pm??0):(DEF[t.id]?.pm??0)}; });
 }
 
 // ── File Import ───────────────────────────────────────────────────────
@@ -278,25 +353,21 @@ function handleFile(e) {
         rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
       }
     } catch(err){ S.importErr='無法解析檔案：'+err.message; render(); return; }
-
     if(!rows.length){ S.importErr='檔案內無資料。'; render(); return; }
     const hdrs=Object.keys(rows[0]);
-    const fk=(ks)=>hdrs.find(h=>ks.map(k=>k.toLowerCase()).includes(h.toLowerCase().trim()));
+    const fk=ks=>hdrs.find(h=>ks.map(k=>k.toLowerCase()).includes(h.toLowerCase().trim()));
     const cId=fk(['治療師id','治療師ID','id','ID','代碼','代號']);
     const cAm=fk(['上午格數','上午','am','baseam','AM格數','上午格']);
     const cPm=fk(['下午格數','下午','pm','basepm','PM格數','下午格']);
-    if(!cId||!cAm||!cPm){
-      S.importErr=`找不到必要欄位，需有：治療師ID、上午格數、下午格數\n現有欄位：${hdrs.join('、')}`;
-      render(); return;
-    }
+    if(!cId||!cAm||!cPm){ S.importErr=`找不到必要欄位，需有：治療師ID、上午格數、下午格數\n現有欄位：${hdrs.join('、')}`; render(); return; }
     const vIds=new Set(TB.map(t=>t.id));
-    const preview=[], errs=[];
+    const preview=[],errs=[];
     rows.forEach((row,i)=>{
       const tid=String(row[cId]||'').trim(); if(!tid) return;
-      const am=parseInt(row[cAm]), pm=parseInt(row[cPm]);
+      const am=parseInt(row[cAm]),pm=parseInt(row[cPm]);
       if(!vIds.has(tid)){ errs.push(`第${i+2}行：找不到治療師「${tid}」`); return; }
       if(isNaN(am)||isNaN(pm)){ errs.push(`第${i+2}行(${tid})：格數格式錯誤`); return; }
-      preview.push({id:tid, name:TB.find(t=>t.id===tid)?.name||tid, am, pm});
+      preview.push({id:tid,name:TB.find(t=>t.id===tid)?.name||tid,am,pm});
     });
     if(errs.length){ S.importErr=errs.join('\n'); render(); return; }
     if(!preview.length){ S.importErr='沒有匹配的治療師資料。'; render(); return; }
@@ -308,37 +379,40 @@ function handleFile(e) {
 
 function confirmImport(){
   if(!S.preview) return;
-  S.preview.forEach(r=>{
-    S.editSlots[r.id]={am:r.am, pm:r.pm};
-  });
+  S.preview.forEach(r=>{ S.editSlots[r.id]={am:r.am,pm:r.pm}; });
   S.importOk=`成功匯入 ${S.preview.length} 筆，請按「儲存至 Firebase」確認生效。`;
   S.preview=null; render();
 }
 
 // ── Export ────────────────────────────────────────────────────────────
-function dlCSV(name,rows){
+function dlCSV(name,rows,suffix){
   if(!rows.length) return;
   let csv='\uFEFF'+Object.keys(rows[0]).join(',')+'\n';
   rows.forEach(r=>{ csv+=Object.values(r).map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')+'\n'; });
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
-  a.download=name+'_'+S.date+'.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  a.download=name+(suffix?'_'+suffix:'')+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
-function dlXLSX(name,rows){
+function dlXLSX(name,rows,suffix){
   if(!rows.length) return;
   const ws=XLSX.utils.json_to_sheet(rows);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
-  XLSX.writeFile(wb, name+'_'+S.date+'.xlsx');
+  XLSX.writeFile(wb,name+(suffix?'_'+suffix:'')+'.xlsx');
 }
-function summaryRows(){
-  const th=therapists(), st=stats();
-  return th.map(t=>{const s=st[t.id];return{治療師:t.name,上午科別:t.amDept,下午科別:t.pmDept,
+
+function getSummaryRows(period){
+  const th=therapistsForPeriod(period);
+  const st=period?statsForPeriod(period):statsAllTime();
+  return th.map(t=>{const s=st[t.id];return{
+    治療師:t.name,上午科別:t.amDept,下午科別:t.pmDept,
     上午剩餘:NC(t.amDept)?'N/A':s.amR,上午總格:NC(t.amDept)?'N/A':t.baseAm,
     下午剩餘:NC(t.pmDept)?'N/A':s.pmR,下午總格:NC(t.pmDept)?'N/A':t.basePm,
     門診:s.out,住院:s.inp,合計:s.tot};});
 }
-function detailRows(){
-  return S.assignments.map(a=>({日期:a.dateStr,來源:a.source,科別:a.department,
+function getDetailRows(period){
+  const list=period?assignmentsInPeriod(period):S.assignments;
+  return list.map(a=>({日期:a.dateStr,來源:a.source,科別:a.department,
     時段:a.time==='不限'?`不限(扣${a.consumedTime})`:a.time,治療師:a.therapistName,格數:a.complexity}));
 }
 function dlTemplate(){
@@ -353,10 +427,15 @@ function dlTemplate(){
   XLSX.writeFile(wb,`格數設定模板_${mk(S.date)}.xlsx`);
 }
 
+function getSelectedPeriod(key){
+  if(key==='current') return null;
+  return getPeriods().find(p=>p.monthKey===key)||null;
+}
+
 // ── Event delegation ─────────────────────────────────────────────────
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-a]'); if(!el) return;
-  const a=el.dataset.a, v=el.dataset.v;
+  const a=el.dataset.a,v=el.dataset.v;
   if(a==='tab'){ S.tab=v; if(v==='settings') initEdit(); render(); }
   if(a==='src'){ S.src=v; render(); }
   if(a==='dept'){ S.dept=v; render(); }
@@ -369,10 +448,10 @@ document.addEventListener('click',e=>{
   if(a==='cancel'){ S.preview=null; S.importErr=''; render(); }
   if(a==='dl-tpl') dlTemplate();
   if(a==='upload') document.getElementById('fi').click();
-  if(a==='exp-sum-csv')  dlCSV('格數統計總表', summaryRows());
-  if(a==='exp-sum-xlsx') dlXLSX('格數統計總表', summaryRows());
-  if(a==='exp-det-csv')  dlCSV('全部派案明細', detailRows());
-  if(a==='exp-det-xlsx') dlXLSX('全部派案明細', detailRows());
+  if(a==='exp-sum-csv'){ const p=getSelectedPeriod(S.summaryPeriod); dlCSV('格數統計總表',getSummaryRows(p),p?p.monthKey:'全期'); }
+  if(a==='exp-sum-xlsx'){ const p=getSelectedPeriod(S.summaryPeriod); dlXLSX('格數統計總表',getSummaryRows(p),p?p.monthKey:'全期'); }
+  if(a==='exp-det-csv'){ const p=getSelectedPeriod(S.detailPeriod); dlCSV('全部派案明細',getDetailRows(p),p?p.monthKey:'全期'); }
+  if(a==='exp-det-xlsx'){ const p=getSelectedPeriod(S.detailPeriod); dlXLSX('全部派案明細',getDetailRows(p),p?p.monthKey:'全期'); }
 });
 document.addEventListener('change',e=>{
   const el=e.target;
@@ -380,12 +459,29 @@ document.addEventListener('change',e=>{
   if(el.id==='ts'){ S.tid=el.value; render(); }
   if(el.id==='mp'){ S.date=el.value+'-01'; initEdit(); render(); }
   if(el.id==='fi') handleFile(e);
+  if(el.id==='summary-period'){ S.summaryPeriod=el.value; render(); }
+  if(el.id==='detail-period'){ S.detailPeriod=el.value; render(); }
   if(el.dataset.am){ if(!S.editSlots[el.dataset.am]) S.editSlots[el.dataset.am]={am:0,pm:0}; S.editSlots[el.dataset.am].am=parseInt(el.value)||0; }
   if(el.dataset.pm){ if(!S.editSlots[el.dataset.pm]) S.editSlots[el.dataset.pm]={am:0,pm:0}; S.editSlots[el.dataset.pm].pm=parseInt(el.value)||0; }
 });
 
-// ── Render helpers ────────────────────────────────────────────────────
-const T=(field,val,label,cur)=>`<button class="tog${cur===val?' active':''}" data-a="${field}" data-v="${val}">${label}</button>`;
+// ── Render ────────────────────────────────────────────────────────────
+const T=(f,v,l,c)=>`<button class="tog${c===v?' active':''}" data-a="${f}" data-v="${v}">${l}</button>`;
+
+function periodSelectHtml(id,selected){
+  const periods=getPeriods();
+  const opts=[
+    `<option value="current"${selected==='current'?' selected':''}>全部累積（跨期）</option>`,
+    ...periods.map(p=>`<option value="${p.monthKey}"${selected===p.monthKey?' selected':''}>${p.label}</option>`)
+  ].join('');
+  return `<div class="period-wrap"><select id="${id}" class="period-select">${opts}</select></div>`;
+}
+
+function periodInfoHtml(period){
+  if(!period) return `<div class="notice n-slate">顯示全部期間累積資料（格數以最新期間計算）</div>`;
+  const end=period.endDate?period.endDate:'至今';
+  return `<div class="notice n-blue">📅 期間：${period.startDate} ～ ${end}｜格數設定月份：${period.monthKey}</div>`;
+}
 
 function renderNew(){
   const vl=validList();
@@ -394,32 +490,25 @@ function renderNew(){
   const opts=vl.length===0?'<option value="">── 無符合條件的治療師 ──</option>'
     :vl.map(t=>`<option value="${t.id}"${t.id===S.tid?' selected':''}${t.disabled?' disabled':''}>${t.name}（剩餘 ${t.rem} 格）${t.disabled?' ── 今日已達3人上限':''}</option>`).join('');
   const hasCustom=!!S.slots[mk(S.date)];
+  const curP=getPeriodForDate(S.date);
   const todayList=S.assignments.filter(a=>a.dateStr===S.date);
   const listHtml=todayList.length===0
     ?'<div class="empty-state"><p style="font-size:32px;margin-bottom:8px">📋</p><p>該日尚未有派案紀錄</p></div>'
-    :todayList.map((a,i)=>`<div class="list-item">
-        <div class="list-left">
-          <div class="num-badge">${i+1}</div>
-          <div>
-            <div class="list-name">${a.therapistName}<span class="pill">${a.complexity}格</span></div>
-            <div class="list-tags"><span class="tag">${a.source}</span><span class="tag">${a.department}</span><span class="tag">${a.time}${a.source==='住院'?` (扣${a.consumedTime})`:''}</span></div>
-          </div>
-        </div>
-        <button class="del-btn" data-a="del" data-v="${a.id}" title="刪除">🗑</button>
-      </div>`).join('');
+    :todayList.map((a,i)=>`<div class="list-item"><div class="list-left"><div class="num-badge">${i+1}</div><div>
+      <div class="list-name">${a.therapistName}<span class="pill">${a.complexity}格</span></div>
+      <div class="list-tags"><span class="tag">${a.source}</span><span class="tag">${a.department}</span><span class="tag">${a.time}${a.source==='住院'?` (扣${a.consumedTime})`:''}</span></div>
+    </div></div><button class="del-btn" data-a="del" data-v="${a.id}" title="刪除">🗑</button></div>`).join('');
   return `<div class="grid2">
     <div class="card">
-      <div class="row-gap mb4">
-        <label class="field-label" style="margin:0;white-space:nowrap" for="dp">📅 派案日期</label>
-        <input id="dp" type="date" value="${S.date}" class="date-input">
-      </div>
-      <div class="notice ${hasCustom?'n-green':'n-amber'}">${hasCustom?'✅ 已套用 '+mk(S.date)+' 自訂格數':'⚠️ '+mk(S.date)+' 使用預設格數（可至「月份格數設定」匯入更新）'}</div>
+      <div class="row-gap mb4"><label class="field-label" style="margin:0;white-space:nowrap" for="dp">📅 派案日期</label>
+        <input id="dp" type="date" value="${S.date}" class="date-input"></div>
+      <div class="notice ${hasCustom?'n-green':'n-amber'}">${hasCustom?'✅ 已套用 '+mk(S.date)+' 自訂格數':'⚠️ '+mk(S.date)+' 使用預設格數'}</div>
+      ${curP?`<div class="notice n-blue" style="font-size:11px">📅 目前期間：${curP.startDate}${curP.endDate?' ～ '+curP.endDate:' 起'}（${curP.monthKey} 格數）</div>`:''}
       <div class="field-group"><label class="field-label">個案來源</label><div class="tog-group">${T('src','門診','門診',S.src)}${T('src','住院','住院',S.src)}</div></div>
       <div class="field-group"><label class="field-label">科別</label><div class="tog-group">${T('dept','骨科','骨科',S.dept)}${T('dept','神經','神經',S.dept)}</div></div>
       ${S.src!=='住院'?`<div class="field-group"><label class="field-label">時段</label><div class="tog-group">${T('time','上午','上午',S.time)}${T('time','下午','下午',S.time)}</div></div>`:''}
       <div class="field-group"><label class="field-label">複雜度</label><div class="tog-group">${T('cpx','2','2格（複雜/中複）',S.cpx)}${T('cpx','1','1格（中中/簡中）',S.cpx)}</div></div>
-      <div class="field-group">
-        <label class="field-label" for="ts">優先派案人選</label>
+      <div class="field-group"><label class="field-label" for="ts">優先派案人選</label>
         <div class="select-wrap"><select id="ts">${opts}</select></div>
         ${S.src==='住院'&&sel?`<div class="notice n-blue" style="margin-top:8px">將扣除 <strong>${sel.ct}</strong> 格數</div>`:''}
       </div>
@@ -433,7 +522,9 @@ function renderNew(){
 }
 
 function renderSummary(){
-  const th=therapists(), st=stats();
+  const period=getSelectedPeriod(S.summaryPeriod);
+  const th=therapistsForPeriod(period);
+  const st=period?statsForPeriod(period):statsAllTime();
   const rows=th.map(t=>{const s=st[t.id];const aN=NC(t.amDept),pN=NC(t.pmDept);return`<tr>
     <td><strong>${t.name}</strong> <span class="c-muted">(${t.amDept}/${t.pmDept})</span></td>
     <td>${aN?'<span class="c-muted">─</span>':`<span class="${s.amR<0?'c-red':'c-blue'}">${s.amR}</span> <span class="c-muted">/ ${t.baseAm}</span>`}</td>
@@ -441,13 +532,11 @@ function renderSummary(){
     <td><span class="c-blue">${s.out}</span> / <span class="c-teal">${s.inp}</span> / <strong>${s.tot}</strong></td>
   </tr>`;}).join('');
   return `<div class="card">
-    <div class="card-header">
-      <div class="card-title">👥 格數統計總表</div>
-      <div class="btn-sm-bar">
-        <button class="btn-exp" data-a="exp-sum-csv">📄 CSV</button>
-        <button class="btn-exp green" data-a="exp-sum-xlsx">📊 Excel</button>
-      </div>
+    <div class="card-header"><div class="card-title">👥 格數統計總表</div>
+      <div class="btn-sm-bar"><button class="btn-exp" data-a="exp-sum-csv">📄 CSV</button><button class="btn-exp green" data-a="exp-sum-xlsx">📊 Excel</button></div>
     </div>
+    <div class="row-gap mb4"><label class="field-label" style="margin:0">查詢期間：</label>${periodSelectHtml('summary-period',S.summaryPeriod)}</div>
+    ${periodInfoHtml(period)}
     <div class="table-wrap"><table>
       <thead><tr><th>治療師（上午/下午）</th><th>上午 剩餘/總格</th><th>下午 剩餘/總格</th><th>門診/住院/合計</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -456,7 +545,9 @@ function renderSummary(){
 }
 
 function renderDetails(){
-  const rows=S.assignments.map(a=>`<tr>
+  const period=getSelectedPeriod(S.detailPeriod);
+  const list=period?assignmentsInPeriod(period):S.assignments;
+  const rows=list.map(a=>`<tr>
     <td>${a.dateStr}</td>
     <td><span class="${a.source==='門診'?'badge-blue':'badge-teal'}">${a.source}</span></td>
     <td>${a.department}</td>
@@ -465,16 +556,14 @@ function renderDetails(){
     <td><strong>${a.complexity}</strong></td>
   </tr>`).join('');
   return `<div class="card">
-    <div class="card-header">
-      <div class="card-title">📋 全部派案明細</div>
-      <div class="btn-sm-bar">
-        <button class="btn-exp" data-a="exp-det-csv">📄 CSV</button>
-        <button class="btn-exp green" data-a="exp-det-xlsx">📊 Excel</button>
-      </div>
+    <div class="card-header"><div class="card-title">📋 全部派案明細</div>
+      <div class="btn-sm-bar"><button class="btn-exp" data-a="exp-det-csv">📄 CSV</button><button class="btn-exp green" data-a="exp-det-xlsx">📊 Excel</button></div>
     </div>
-    <div class="table-wrap" style="max-height:560px;overflow-y:auto"><table>
+    <div class="row-gap mb4"><label class="field-label" style="margin:0">查詢期間：</label>${periodSelectHtml('detail-period',S.detailPeriod)}</div>
+    ${periodInfoHtml(period)}
+    <div class="table-wrap" style="max-height:520px;overflow-y:auto"><table>
       <thead class="sticky-head"><tr><th>日期</th><th>來源</th><th>科別</th><th>時段</th><th>治療師</th><th>格數</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="6" class="empty-td">尚無派案紀錄</td></tr>'}</tbody>
+      <tbody>${rows.length?rows:'<tr><td colspan="6" class="empty-td">此期間無派案紀錄</td></tr>'}</tbody>
     </table></div>
   </div>`;
 }
@@ -483,10 +572,8 @@ function renderSettings(){
   const m=mk(S.date), hasData=!!S.slots[m];
   const tRows=TB.map(t=>{
     const aN=NC(t.amDept),pN=NC(t.pmDept);
-    const av=S.editSlots[t.id]?.am??0, pv=S.editSlots[t.id]?.pm??0;
-    return`<tr>
-      <td><strong>${t.name}</strong></td>
-      <td class="c-muted">${t.amDept}</td><td class="c-muted">${t.pmDept}</td>
+    const av=S.editSlots[t.id]?.am??0,pv=S.editSlots[t.id]?.pm??0;
+    return`<tr><td><strong>${t.name}</strong></td><td class="c-muted">${t.amDept}</td><td class="c-muted">${t.pmDept}</td>
       <td>${aN?'<span class="c-muted">─</span>':`<input type="number" min="0" value="${av}" data-am="${t.id}" class="slot-input">`}</td>
       <td>${pN?'<span class="c-muted">─</span>':`<input type="number" min="0" value="${pv}" data-pm="${t.id}" class="slot-input">`}</td>
     </tr>`;
@@ -495,22 +582,24 @@ function renderSettings(){
     <div class="preview-hdr"><span>📋 匯入預覽（${S.preview.length} 筆）</span>
       <div style="display:flex;gap:6px"><button class="btn-cancel" data-a="cancel">取消</button><button class="btn-confirm" data-a="confirm">確認套用</button></div>
     </div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>治療師</th><th>上午格數</th><th>下午格數</th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>治療師</th><th>上午格數</th><th>下午格數</th></tr></thead>
       <tbody>${S.preview.map(r=>`<tr><td>${r.name}</td><td class="c-blue">${r.am}</td><td class="c-blue">${r.pm}</td></tr>`).join('')}</tbody>
-    </table></div>
-  </div>`:'';
+    </table></div></div>`:'';
+  const periods=getPeriods();
+  const histHtml=periods.length?`<div class="card"><div class="card-title">📆 已設定的格數期間</div>
+    <div class="table-wrap" style="margin-top:10px"><table>
+      <thead><tr><th>月份</th><th>期間起始日</th><th>期間結束日</th></tr></thead>
+      <tbody>${periods.map(p=>`<tr><td><span class="period-badge">${p.monthKey}</span></td><td>${p.startDate}</td><td>${p.endDate||'<span class="c-muted">至今</span>'}</td></tr>`).join('')}</tbody>
+    </table></div></div>`:'';
   return `<div class="vgap">
     <div class="card">
-      <div class="card-header">
-        <div class="card-title">⚙️ 月份格數設定</div>
-        <div class="row-gap"><span class="field-label" style="margin:0">設定月份：</span>
-          <input id="mp" type="month" value="${m}" class="date-input"></div>
+      <div class="card-header"><div class="card-title">⚙️ 月份格數設定</div>
+        <div class="row-gap"><span class="field-label" style="margin:0">設定月份：</span><input id="mp" type="month" value="${m}" class="date-input"></div>
       </div>
-      <div class="notice ${hasData?'n-green':'n-amber'}">${hasData?'✅ '+m+' 已有自訂格數設定':'⚠️ '+m+' 目前使用預設格數'}</div>
+      <div class="notice ${hasData?'n-green':'n-amber'}">${hasData?'✅ '+m+' 已有格數設定':'⚠️ '+m+' 目前使用預設格數'}</div>
+      <div class="notice n-blue" style="font-size:12px">💡 儲存的當天將自動成為新期間起始日，總表與明細可依期間分別查詢與匯出。</div>
     </div>
-    <div class="card">
-      <div class="card-title">📤 整批匯入格數（Excel / CSV）</div>
+    <div class="card"><div class="card-title">📤 整批匯入格數（Excel / CSV）</div>
       <div class="howto"><strong>使用方式：</strong><ol>
         <li>下載模板 → 填入各治療師上午/下午格數</li>
         <li>上傳檔案 → 確認預覽 → 按「確認套用」</li>
@@ -525,8 +614,7 @@ function renderSettings(){
       ${S.importOk?`<div class="notice n-green">✅ ${S.importOk}</div>`:''}
       ${pvHtml}
     </div>
-    <div class="card">
-      <div class="card-title">✏️ 手動調整格數</div>
+    <div class="card"><div class="card-title">✏️ 手動調整格數</div>
       <div class="table-wrap" style="margin-top:10px"><table>
         <thead><tr><th>治療師</th><th>上午科別</th><th>下午科別</th><th>上午格數</th><th>下午格數</th></tr></thead>
         <tbody>${tRows}</tbody>
@@ -536,16 +624,16 @@ function renderSettings(){
           ${S.saving?'⏳ 儲存中...':'💾 儲存 '+m+' 至 Firebase'}
         </button>
         ${S.saveOk?'<span class="save-ok">✅ 儲存成功！已同步所有裝置</span>':''}
-        <span class="c-muted">儲存後所有裝置立即生效</span>
+        <span class="c-muted">儲存後所有裝置立即生效，並記錄為新期間起始日</span>
       </div>
     </div>
+    ${histHtml}
   </div>`;
 }
 
-// ── Main render ───────────────────────────────────────────────────────
 function render(){
   const tabs=[
-    {id:'new',    label:'➕ 新增派案'},
+    {id:'new',label:'➕ 新增派案'},
     {id:'summary',label:'👥 總表'},
     {id:'details',label:'📋 全部明細'},
     {id:'settings',label:'⚙️ 月份格數設定'},
@@ -555,7 +643,6 @@ function render(){
   if(S.tab==='summary')  content=renderSummary();
   if(S.tab==='details')  content=renderDetails();
   if(S.tab==='settings') content=renderSettings();
-
   document.getElementById('app').innerHTML=`
     <header class="header"><div class="container"><h1 class="h1">⚡ 物理治療排個案系統</h1></div></header>
     <div class="container" style="padding-top:20px;padding-bottom:40px">
