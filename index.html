@@ -455,7 +455,7 @@ document.addEventListener('change',e=>{
 });
 
 // ── Render ────────────────────────────────────────────────────────────
-const T=(f,v,l,c)=>`<button class="tog${c===v?' active':''}" data-a="${f}" data-v="${v}">${l}</button>`;
+const T=(f,v,l,c)=>`<button class="tog${String(c)===String(v)?' active':''}" data-a="${f}" data-v="${v}">${l}</button>`;
 
 function periodSelectHtml(id,selected){
   const periods=getPeriods();
