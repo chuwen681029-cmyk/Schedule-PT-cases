@@ -495,7 +495,7 @@ function renderNew(){
       <div class="field-group"><label class="field-label">個案來源</label><div class="tog-group">${T('src','門診','門診',S.src)}${T('src','住院','住院',S.src)}</div></div>
       <div class="field-group"><label class="field-label">科別</label><div class="tog-group">${T('dept','骨科','骨科',S.dept)}${T('dept','神經','神經',S.dept)}</div></div>
       ${S.src!=='住院'?`<div class="field-group"><label class="field-label">時段</label><div class="tog-group">${T('time','上午','上午',S.time)}${T('time','下午','下午',S.time)}</div></div>`:''}
-      <div class="field-group"><label class="field-label">複雜度</label><div class="tog-group">${T('cpx','2','2格（複雜/中複）',S.cpx)}${T('cpx','1','1格（中中/簡中）',S.cpx)}</div></div>
+      <div class="field-group"><label class="field-label">複雜度</label><div class="tog-group">${T('cpx',2,'2格（複雜/中複）',S.cpx)}${T('cpx',1,'1格（中中/簡中）',S.cpx)}</div></div>
       <div class="field-group"><label class="field-label" for="ts">優先派案人選</label>
         <div class="select-wrap"><select id="ts">${opts}</select></div>
         ${S.src==='住院'&&sel?`<div class="notice n-blue" style="margin-top:8px">將扣除 <strong>${sel.ct}</strong> 格數</div>`:''}
