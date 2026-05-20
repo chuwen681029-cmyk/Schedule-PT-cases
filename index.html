@@ -160,6 +160,7 @@ const S = {
   summaryPeriod:'current', detailPeriod:'current',
   // 格數設定頁登入狀態（重新整理後需重新登入）
   settingsAuth:false, loginUser:'', loginPass:'', loginErr:'',
+  lineIds:{}, lineIdsEdit:{}, lineIdsSaveOk:false, lineIdsSaving:false,
 };
 
 // ── 期間計算 ──────────────────────────────────────────────────────────
@@ -261,6 +262,7 @@ const auth=getAuth(fbApp); const db=getFirestore(fbApp);
 const aCol=()=>collection(db,'artifacts',APP_ID,'public','data','assignments');
 const sCol=()=>collection(db,'artifacts',APP_ID,'public','data','monthlySlots');
 const hCol=()=>collection(db,'artifacts',APP_ID,'public','data','slotsHistory');
+const lCol=()=>collection(db,'artifacts',APP_ID,'public','data','lineIds');
 
 signInAnonymously(auth).catch(console.error);
 onAuthStateChanged(auth,user=>{
@@ -274,23 +276,56 @@ onAuthStateChanged(auth,user=>{
   onSnapshot(query(hCol(),orderBy('savedDate','asc')),snap=>{
     S.slotsHistory=snap.docs.map(d=>({id:d.id,...d.data()})); render();
   });
+  // 監聽治療師 LINE ID
+  onSnapshot(lCol(),snap=>{
+    S.lineIds={};
+    snap.docs.forEach(d=>{ S.lineIds[d.id]=d.data().lineId||''; });
+    render();
+  });
   document.getElementById('loading').style.display='none';
   document.getElementById('app').style.display='block';
 });
 
 // ── Actions ───────────────────────────────────────────────────────────
+// ── Make Webhook URL（LINE 通知）────────────────────────────────────
+const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/5unjuqa573p15bc7pffit7h25pe6te6k';
+
+async function sendLineNotify(data) {
+  const lineId = S.lineIds[data.therapistId] || '';
+  if (!lineId) return; // 沒有設定 LINE ID 就略過
+  try {
+    await fetch(MAKE_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        therapistName: data.therapistName,
+        therapistId:   data.therapistId,
+        lineUserId:    lineId,
+        dateStr:       data.dateStr,
+        source:        data.source,
+        department:    data.department,
+        time:          data.time,
+        complexity:    data.complexity,
+      })
+    });
+  } catch(e) { console.error('LINE notify error:', e); }
+}
+
 async function submit(){
   if(!S.tid||S.submitting) return;
   const vl=validList(); const sel=vl.find(t=>t.id===S.tid); if(!sel) return;
   S.submitting=true; render();
   try{
-    await addDoc(aCol(),{
+    const assignmentData = {
       dateStr:S.date,source:S.src,department:S.dept,
       time:S.src==='住院'?'不限':S.time,
       consumedTime:sel.ct,complexity:S.cpx,
       therapistId:S.tid,therapistName:sel.name,
       createdAt:serverTimestamp()
-    });
+    };
+    await addDoc(aCol(), assignmentData);
+    // 派案成功後發送 LINE 通知
+    await sendLineNotify({...assignmentData, time: S.src==='住院'?'不限':S.time});
     S.cpx=1;
   }catch(e){console.error(e);}
   S.submitting=false; render();
@@ -418,7 +453,7 @@ function getSelectedPeriod(key){
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-a]'); if(!el) return;
   const a=el.dataset.a,v=el.dataset.v;
-  if(a==='tab'){S.tab=v;if(v==='settings'&&S.settingsAuth)initEdit();render();}
+  if(a==='tab'){S.tab=v;if(v==='settings'&&S.settingsAuth)initEdit();if(v==='lineids'&&S.settingsAuth)initLineIdsEdit();render();}
   if(a==='src'){S.src=v;render();}
   if(a==='dept'){S.dept=v;render();}
   if(a==='time'){S.time=v;render();}
@@ -436,6 +471,7 @@ document.addEventListener('click',e=>{
   if(a==='exp-sum-xlsx'){const p=getSelectedPeriod(S.summaryPeriod);dlXLSX('格數統計總表',getSummaryRows(p),p?p.monthKey:'全期');}
   if(a==='exp-det-csv'){const p=getSelectedPeriod(S.detailPeriod);dlCSV('全部派案明細',getDetailRows(p),p?p.monthKey:'全期');}
   if(a==='exp-det-xlsx'){const p=getSelectedPeriod(S.detailPeriod);dlXLSX('全部派案明細',getDetailRows(p),p?p.monthKey:'全期');}
+  if(a==='save-lineids') saveLineIds();
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&S.tab==='settings'&&!S.settingsAuth) tryLogin();
@@ -452,7 +488,29 @@ document.addEventListener('change',e=>{
   if(el.id==='login-pass') S.loginPass=el.value;
   if(el.dataset.am){if(!S.editSlots[el.dataset.am])S.editSlots[el.dataset.am]={am:0,pm:0};S.editSlots[el.dataset.am].am=parseInt(el.value)||0;}
   if(el.dataset.pm){if(!S.editSlots[el.dataset.pm])S.editSlots[el.dataset.pm]={am:0,pm:0};S.editSlots[el.dataset.pm].pm=parseInt(el.value)||0;}
+  if(el.dataset.lid){ S.lineIdsEdit[el.dataset.lid]=el.value; }
+  if(el.dataset.lid){ S.lineIdsEdit[el.dataset.lid]=el.value; }
 });
+
+// ── LINE ID 儲存 ──────────────────────────────────────────────────────
+async function saveLineIds(){
+  if(S.lineIdsSaving) return;
+  S.lineIdsSaving=true; render();
+  try{
+    for(const tid of Object.keys(S.lineIdsEdit)){
+      await setDoc(doc(db,'artifacts',APP_ID,'public','data','lineIds',tid),{
+        lineId: S.lineIdsEdit[tid]||''
+      });
+    }
+    S.lineIdsSaveOk=true; setTimeout(()=>{S.lineIdsSaveOk=false;render();},2500);
+  }catch(e){console.error(e);}
+  S.lineIdsSaving=false; render();
+}
+
+function initLineIdsEdit(){
+  S.lineIdsEdit={};
+  TB.forEach(t=>{ S.lineIdsEdit[t.id]=S.lineIds[t.id]||''; });
+}
 
 // ── Render ────────────────────────────────────────────────────────────
 const T=(f,v,l,c)=>`<button class="tog${String(c)===String(v)?' active':''}" data-a="${f}" data-v="${v}">${l}</button>`;
@@ -644,18 +702,74 @@ function renderSettings(){
   </div>`;
 }
 
+function renderLineIds(){
+  // 未登入 → 顯示登入頁
+  if(!S.settingsAuth) return renderSettingsLogin();
+
+  const rows = TB.map(t=>{
+    const val = S.lineIdsEdit[t.id]||'';
+    const saved = S.lineIds[t.id]||'';
+    return `<tr>
+      <td><strong>${t.name}</strong></td>
+      <td class="c-muted">${t.amDept}/${t.pmDept}</td>
+      <td>
+        <input type="text" data-lid="${t.id}" value="${val}"
+          placeholder="U開頭的LINE User ID"
+          style="width:100%;padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;outline:none;font-family:inherit"
+          onfocus="this.style.borderColor='#1d4ed8'"
+          onblur="this.style.borderColor='#cbd5e1'">
+      </td>
+      <td>${saved
+        ? '<span style=\"color:#15803d;font-size:11px\">✅ 已設定</span>'
+        : '<span style=\"color:#94a3b8;font-size:11px\">未設定</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="vgap">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📱 治療師 LINE ID 設定</div>
+        <button class="logout-btn" data-a="logout">登出</button>
+      </div>
+      <div class="notice n-blue" style="font-size:12px">
+        💡 每位治療師需先加 <strong>YLH-PT（@796wzzsw）</strong> 為好友，才能收到推播。<br>
+        LINE User ID 請至 LINE Developers Console → Basic settings → Your user ID 取得。
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>治療師</th><th>科別</th><th>LINE User ID</th><th>狀態</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="save-row">
+        <button class="btn-primary" style="width:auto;padding:10px 24px" data-a="save-lineids" ${S.lineIdsSaving?'disabled':''}>
+          ${S.lineIdsSaving?'⏳ 儲存中...':'💾 儲存 LINE ID 設定'}
+        </button>
+        ${S.lineIdsSaveOk?'<span class="save-ok">✅ 儲存成功！</span>':''}
+        <span class="c-muted">儲存後派案時自動推播 LINE 通知</span>
+      </div>
+    </div>
+  </div>`;
+}
+
 function render(){
   const tabs=[
     {id:'new',label:'➕ 新增派案'},
     {id:'summary',label:'👥 總表'},
     {id:'details',label:'📋 全部明細'},
     {id:'settings',label:'⚙️ 月份格數設定'},
+    {id:'lineids',label:'📱 LINE ID 設定'},
   ];
   let content='';
   if(S.tab==='new')      content=renderNew();
   if(S.tab==='summary')  content=renderSummary();
   if(S.tab==='details')  content=renderDetails();
   if(S.tab==='settings') content=renderSettings();
+  if(S.tab==='lineids')  content=renderLineIds();
   document.getElementById('app').innerHTML=`
     <header class="header"><div class="container"><h1 class="h1">⚡ 物理治療排個案系統</h1></div></header>
     <div class="container" style="padding-top:20px;padding-bottom:40px">
