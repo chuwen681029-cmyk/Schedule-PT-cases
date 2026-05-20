@@ -306,6 +306,7 @@ async function sendLineNotify(data) {
         department:    data.department,
         time:          data.time,
         complexity:    data.complexity,
+        isDelete:      data.isDelete || false,
       })
     });
   } catch(e) { console.error('LINE notify error:', e); }
@@ -331,7 +332,18 @@ async function submit(){
   S.submitting=false; render();
 }
 async function del(id){
-  try{await deleteDoc(doc(db,'artifacts',APP_ID,'public','data','assignments',id));}catch(e){console.error(e);}
+  try{
+    // 刪除前先找到派案資料，以便發送通知
+    const assignment = S.assignments.find(a=>a.id===id);
+    await deleteDoc(doc(db,'artifacts',APP_ID,'public','data','assignments',id));
+    // 刪除成功後發送 LINE 通知
+    if(assignment){
+      await sendLineNotify({
+        ...assignment,
+        isDelete: true,
+      });
+    }
+  }catch(e){console.error(e);}
 }
 async function saveSlots(){
   if(S.saving) return; S.saving=true; render();
