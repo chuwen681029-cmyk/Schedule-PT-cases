@@ -292,12 +292,15 @@ const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/5unjuqa573p15bc7pffit7h25pe6
 
 async function sendLineNotify(data) {
   const lineId = S.lineIds[data.therapistId] || '';
-  if (!lineId) return; // 沒有設定 LINE ID 就略過
+  if (!lineId) return;
+  const isDelete = data.isDelete || false;
+  const title = isDelete ? '🗑 派案刪除通知' : '🏥 物理治療派案通知';
   try {
     await fetch(MAKE_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        title,
         therapistName: data.therapistName,
         therapistId:   data.therapistId,
         lineUserId:    lineId,
@@ -306,7 +309,6 @@ async function sendLineNotify(data) {
         department:    data.department,
         time:          data.time,
         complexity:    data.complexity,
-        isDelete:      data.isDelete || false,
       })
     });
   } catch(e) { console.error('LINE notify error:', e); }
