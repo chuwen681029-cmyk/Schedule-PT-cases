@@ -290,30 +290,34 @@ onAuthStateChanged(auth,user=>{
 // ── Make Webhook URL（LINE 通知）────────────────────────────────────
 const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/5unjuqa573p15bc7pffit7h25pe6te6k';
 
+// ── 治療師 LINE ID 對照表（直接寫在程式碼，日後如需修改請更新此處）──
+const THERAPIST_LINE_IDS = {
+  PJ: 'Ubb332be974ac73e7324d8694db3d0da5', // PJ黃秋雯
+  // 其他治療師加好友後填入：
+  // PD: 'U...', PF: 'U...', PG: 'U...', PH: 'U...',
+  // PI: 'U...', PP: 'U...', PU: 'U...', PV: 'U...',
+  // PA: 'U...', P3: 'U...',
+};
+
 function sendLineNotify(data) {
   // 完全非同步，絕不影響派案作業
   try {
-    const lineId = (S.lineIds && S.lineIds[data.therapistId]) || '';
-    if (!lineId) return;
-    const isDelete = data.isDelete || false;
-    const title = isDelete ? '🗑 派案刪除通知' : '🏥 物理治療派案通知';
+    const lineId = THERAPIST_LINE_IDS[data.therapistId] || '';
+    if (!lineId) return; // 沒有設定 LINE ID 就略過
     fetch(MAKE_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title,
         therapistName: data.therapistName || '',
-        therapistId:   data.therapistId   || '',
-        lineUserId:    lineId,
         dateStr:       data.dateStr       || '',
         source:        data.source        || '',
         department:    data.department    || '',
         time:          data.time          || '',
         complexity:    data.complexity    || '',
       })
-    }).catch(e => console.log('LINE notify failed (non-critical):', e));
+    }).catch(e => console.log('LINE notify failed:', e));
   } catch(e) {
-    console.log('LINE notify error (non-critical):', e);
+    console.log('LINE notify error:', e);
   }
 }
 
