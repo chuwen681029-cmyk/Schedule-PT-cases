@@ -349,12 +349,7 @@ async function submit(){
 }
 async function del(id){
   try{
-    const assignment = S.assignments.find(a=>a.id===id);
     await deleteDoc(doc(db,'artifacts',APP_ID,'public','data','assignments',id));
-    // LINE 通知完全獨立，不影響刪除作業
-    if(assignment){
-      setTimeout(()=>{ sendLineNotify({...assignment, isDelete:true}); }, 0);
-    }
   }catch(e){console.error(e);}
 }
 async function saveSlots(){
