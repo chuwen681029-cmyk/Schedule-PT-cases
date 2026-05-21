@@ -290,60 +290,66 @@ onAuthStateChanged(auth,user=>{
 // ── Make Webhook URL（LINE 通知）────────────────────────────────────
 const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/5unjuqa573p15bc7pffit7h25pe6te6k';
 
-async function sendLineNotify(data) {
-  const lineId = S.lineIds[data.therapistId] || '';
-  if (!lineId) return;
-  const isDelete = data.isDelete || false;
-  const title = isDelete ? '🗑 派案刪除通知' : '🏥 物理治療派案通知';
+function sendLineNotify(data) {
+  // 完全非同步，絕不影響派案作業
   try {
-    await fetch(MAKE_WEBHOOK_URL, {
+    const lineId = (S.lineIds && S.lineIds[data.therapistId]) || '';
+    if (!lineId) return;
+    const isDelete = data.isDelete || false;
+    const title = isDelete ? '🗑 派案刪除通知' : '🏥 物理治療派案通知';
+    fetch(MAKE_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title,
-        therapistName: data.therapistName,
-        therapistId:   data.therapistId,
+        therapistName: data.therapistName || '',
+        therapistId:   data.therapistId   || '',
         lineUserId:    lineId,
-        dateStr:       data.dateStr,
-        source:        data.source,
-        department:    data.department,
-        time:          data.time,
-        complexity:    data.complexity,
+        dateStr:       data.dateStr       || '',
+        source:        data.source        || '',
+        department:    data.department    || '',
+        time:          data.time          || '',
+        complexity:    data.complexity    || '',
       })
-    });
-  } catch(e) { console.error('LINE notify error:', e); }
+    }).catch(e => console.log('LINE notify failed (non-critical):', e));
+  } catch(e) {
+    console.log('LINE notify error (non-critical):', e);
+  }
 }
 
 async function submit(){
   if(!S.tid||S.submitting) return;
   const vl=validList(); const sel=vl.find(t=>t.id===S.tid); if(!sel) return;
+  // 先記錄要通知的資料（submit 前確保資料正確）
+  const notifyData = {
+    dateStr:    S.date,
+    source:     S.src,
+    department: S.dept,
+    time:       S.src==='住院'?'不限':S.time,
+    complexity: S.cpx,
+    therapistId:   S.tid,
+    therapistName: sel.name,
+  };
   S.submitting=true; render();
   try{
-    const assignmentData = {
-      dateStr:S.date,source:S.src,department:S.dept,
-      time:S.src==='住院'?'不限':S.time,
-      consumedTime:sel.ct,complexity:S.cpx,
-      therapistId:S.tid,therapistName:sel.name,
+    await addDoc(aCol(),{
+      ...notifyData,
+      consumedTime:sel.ct,
       createdAt:serverTimestamp()
-    };
-    await addDoc(aCol(), assignmentData);
-    // 派案成功後發送 LINE 通知
-    await sendLineNotify({...assignmentData, time: S.src==='住院'?'不限':S.time});
+    });
     S.cpx=1;
   }catch(e){console.error(e);}
   S.submitting=false; render();
+  // LINE 通知完全獨立，不阻擋派案
+  setTimeout(()=>sendLineNotify(notifyData), 0);
 }
 async function del(id){
   try{
-    // 刪除前先找到派案資料，以便發送通知
     const assignment = S.assignments.find(a=>a.id===id);
     await deleteDoc(doc(db,'artifacts',APP_ID,'public','data','assignments',id));
-    // 刪除成功後發送 LINE 通知
+    // LINE 通知完全獨立，不影響刪除作業
     if(assignment){
-      await sendLineNotify({
-        ...assignment,
-        isDelete: true,
-      });
+      setTimeout(()=>{ sendLineNotify({...assignment, isDelete:true}); }, 0);
     }
   }catch(e){console.error(e);}
 }
